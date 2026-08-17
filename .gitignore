@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Environment
+.env
+**/.env
+!.env.example
+
+# Build output
+dist/
+**/dist/
+build/
+
+# Uploads (user content, never committed)
+uploads/*
+!uploads/.gitkeep
+
+# Logs
+npm-debug.log*
+*.log
+
+# Testing
+coverage/
+**/coverage/
+
+# Editor / OS
+.DS_Store
+.vscode/
+.idea/
+
+# Jenkins
+.jenkins/
