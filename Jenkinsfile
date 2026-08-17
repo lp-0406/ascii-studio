@@ -76,26 +76,52 @@ pipeline {
                 script {
                     if (isUnix()) {
 
+                        // Create the test database
                         sh '''
-                            mysql -h 127.0.0.1 -u root -p"$DB_PASSWORD" \
-                              -e "CREATE DATABASE IF NOT EXISTS ascii_studio_test;"
-
-                            mysql -h 127.0.0.1 -u root -p"$DB_PASSWORD" \
-                              ascii_studio_test < database/schema.sql
+                            mysql -h 127.0.0.1 \
+                                -u "$DB_USER" \
+                                -p"$DB_PASSWORD" \
+                                -e "CREATE DATABASE IF NOT EXISTS ascii_studio_test;"
                         '''
 
+                        // Load schema into the TEST database
+                        sh '''
+                            mysql -h 127.0.0.1 \
+                                -u "$DB_USER" \
+                                -p"$DB_PASSWORD" \
+                                ascii_studio_test < database/schema.sql
+                        '''
+
+                        // Run backend tests
                         sh 'npm test --prefix server'
 
                     } else {
 
+                        // Create the test database
                         bat '''
-                            mysql -h 127.0.0.1 -u root -p"%DB_PASSWORD%" ^
-                              -e "CREATE DATABASE IF NOT EXISTS ascii_studio_test;"
-
-                            mysql -h 127.0.0.1 -u root -p"%DB_PASSWORD%" ^
-                              ascii_studio_test < database\\schema.sql
+                            mysql -h 127.0.0.1 ^
+                                -u "%DB_USER%" ^
+                                -p"%DB_PASSWORD%" ^
+                                -e "CREATE DATABASE IF NOT EXISTS ascii_studio_test;"
                         '''
 
+                        // Load schema into the TEST database
+                        bat '''
+                            mysql -h 127.0.0.1 ^
+                                -u "%DB_USER%" ^
+                                -p"%DB_PASSWORD%" ^
+                                ascii_studio_test < database\\schema.sql
+                        '''
+
+                        // Verify that required tables exist
+                        bat '''
+                            mysql -h 127.0.0.1 ^
+                                -u "%DB_USER%" ^
+                                -p"%DB_PASSWORD%" ^
+                                -e "USE ascii_studio_test; SHOW TABLES;"
+                        '''
+
+                        // Run backend tests
                         bat 'npm test --prefix server'
                     }
                 }
@@ -169,8 +195,13 @@ pipeline {
 
             post {
                 always {
-                    // Jenkins is running on a Windows agent in this setup.
-                    bat 'docker compose down || exit 0'
+                    script {
+                        if (isUnix()) {
+                            sh 'docker compose down || true'
+                        } else {
+                            bat 'docker compose down || exit 0'
+                        }
+                    }
                 }
             }
         }
@@ -220,8 +251,13 @@ pipeline {
         }
 
         always {
-            // Windows Jenkins agent cleanup
-            bat 'docker compose down || exit 0'
+            script {
+                if (isUnix()) {
+                    sh 'docker compose down || true'
+                } else {
+                    bat 'docker compose down || exit 0'
+                }
+            }
         }
     }
 }

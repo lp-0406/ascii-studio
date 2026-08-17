@@ -1,11 +1,10 @@
 -- ASCII Studio Database Schema
 -- MySQL 8.0+
+--
+-- The database is selected by the environment that runs this schema.
+-- Do not CREATE DATABASE or USE a specific database here.
 
-CREATE DATABASE IF NOT EXISTS ascii_studio
-  CHARACTER SET utf8mb4
-  COLLATE utf8mb4_unicode_ci;
-
-USE ascii_studio;
+SET NAMES utf8mb4;
 
 -- ---------------------------------------------------------------
 -- users
@@ -14,7 +13,7 @@ CREATE TABLE IF NOT EXISTS users (
   id            INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   name          VARCHAR(100)  NOT NULL,
   email         VARCHAR(255)  NOT NULL,
-  password_hash VARCHAR(255)  NOT NULL,
+  password_hash VARCHAR(255) NOT NULL,
   created_at    TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at    TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP
                               ON UPDATE CURRENT_TIMESTAMP,
@@ -28,7 +27,7 @@ CREATE TABLE IF NOT EXISTS artworks (
   id                INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   user_id           INT UNSIGNED NOT NULL,
   title             VARCHAR(150) NOT NULL,
-  ascii_content      LONGTEXT     NOT NULL,
+  ascii_content     LONGTEXT     NOT NULL,
   original_filename VARCHAR(255) NOT NULL,
   settings          JSON         NULL,
   created_at        TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
