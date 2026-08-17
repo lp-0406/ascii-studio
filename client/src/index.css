@@ -1,0 +1,20 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+}
+
+.ascii-output {
+  white-space: pre;
+  overflow-x: auto;
+  line-height: 1.05;
+  font-size: 6px;
+}
+
+@media (min-width: 768px) {
+  .ascii-output {
+    font-size: 8px;
+  }
+}
