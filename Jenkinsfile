@@ -1,22 +1,16 @@
 // ASCII Studio - Jenkins CI/CD Pipeline
 //
-// Works on Linux or Windows agents. Detects the agent OS at runtime
-// and switches between `sh` (Linux/macOS) and `bat` (Windows) so the
-// same Jenkinsfile runs on either kind of node.
+// Supports Linux/macOS and Windows agents.
 //
-// Required Jenkins tools/plugins (see docs/jenkins.md for full setup):
-//   - NodeJS plugin (a "NodeJS" tool named "node20" configured in
-//     Manage Jenkins > Tools), OR Node.js preinstalled on the agent
-//   - Docker installed on the agent (and the agent user has permission
-//     to run `docker`/`docker compose`)
-//   - Git plugin
-//   - Credentials plugin (for JWT_SECRET / DB_PASSWORD, injected via
-//     Jenkins Credentials, never hardcoded)
+// Required Jenkins tools/plugins:
+// - Git plugin
+// - Credentials plugin
+// - NodeJS plugin (optional if Node.js is already installed on the agent)
+// - Docker installed and available to the Jenkins agent
 //
-// Secrets: JWT_SECRET, DB_PASSWORD, DB_ROOT_PASSWORD are pulled from
-// Jenkins credentials at runtime via the `environment` block below.
-// Create these as "Secret text" credentials in Jenkins with the IDs
-// referenced here before running the pipeline.
+// Jenkins Credentials required:
+// - ascii-studio-jwt-secret
+// - ascii-studio-db-password
 
 pipeline {
     agent any
@@ -28,9 +22,8 @@ pipeline {
     }
 
     environment {
-        // Pulled from Jenkins Credentials Manager - never hardcoded.
-        JWT_SECRET     = credentials('ascii-studio-jwt-secret')
-        DB_PASSWORD    = credentials('ascii-studio-db-password')
+        JWT_SECRET = credentials('ascii-studio-jwt-secret')
+        DB_PASSWORD = credentials('ascii-studio-db-password')
         COMPOSE_PROJECT_NAME = 'ascii-studio'
     }
 
@@ -72,23 +65,37 @@ pipeline {
 
         stage('Test') {
             environment {
-                NODE_ENV    = 'test'
-                DB_HOST     = 'localhost'
-                DB_PORT     = '3306'
-                DB_NAME     = 'ascii_studio_test'
-                DB_USER     = 'root'
+                NODE_ENV = 'test'
+                DB_HOST = '127.0.0.1'
+                DB_PORT = '3306'
+                DB_NAME = 'ascii_studio_test'
+                DB_USER = 'root'
             }
+
             steps {
                 script {
                     if (isUnix()) {
+
                         sh '''
-                            mysql -h 127.0.0.1 -u root -e "CREATE DATABASE IF NOT EXISTS ascii_studio_test;"
-                            mysql -h 127.0.0.1 -u root ascii_studio_test < database/schema.sql
+                            mysql -h 127.0.0.1 -u root -p"$DB_PASSWORD" \
+                              -e "CREATE DATABASE IF NOT EXISTS ascii_studio_test;"
+
+                            mysql -h 127.0.0.1 -u root -p"$DB_PASSWORD" \
+                              ascii_studio_test < database/schema.sql
                         '''
+
                         sh 'npm test --prefix server'
+
                     } else {
-                        bat 'mysql -h 127.0.0.1 -u root -e "CREATE DATABASE IF NOT EXISTS ascii_studio_test;"'
-                        bat 'mysql -h 127.0.0.1 -u root ascii_studio_test < database\\schema.sql'
+
+                        bat '''
+                            mysql -h 127.0.0.1 -u root -p"%DB_PASSWORD%" ^
+                              -e "CREATE DATABASE IF NOT EXISTS ascii_studio_test;"
+
+                            mysql -h 127.0.0.1 -u root -p"%DB_PASSWORD%" ^
+                              ascii_studio_test < database\\schema.sql
+                        '''
+
                         bat 'npm test --prefix server'
                     }
                 }
@@ -109,8 +116,6 @@ pipeline {
 
         stage('Build Backend') {
             steps {
-                // The backend has no separate compile step (plain Node.js),
-                // but this stage validates the entrypoint loads cleanly.
                 script {
                     if (isUnix()) {
                         sh 'node --check server/src/server.js'
@@ -137,27 +142,35 @@ pipeline {
             steps {
                 script {
                     if (isUnix()) {
+
                         sh 'docker compose up -d'
                         sh 'sleep 15'
+
                         sh '''
-                            curl -f http://localhost:5000/api/health || (docker compose logs && exit 1)
+                            curl -f http://localhost:5000/api/health \
+                            || (docker compose logs && exit 1)
                         '''
+
                     } else {
+
                         bat 'docker compose up -d'
-                        bat 'timeout /t 15'
-                        bat 'curl -f http://localhost:5000/api/health || (docker compose logs && exit /b 1)'
+                        bat 'timeout /t 15 /nobreak'
+
+                        bat '''
+                            curl -f http://localhost:5000/api/health
+                            if errorlevel 1 (
+                                docker compose logs
+                                exit /b 1
+                            )
+                        '''
                     }
                 }
             }
+
             post {
                 always {
-                    script {
-                        if (isUnix()) {
-                            sh 'docker compose down'
-                        } else {
-                            bat 'docker compose down'
-                        }
-                    }
+                    // Jenkins is running on a Windows agent in this setup.
+                    bat 'docker compose down || exit 0'
                 }
             }
         }
@@ -166,21 +179,30 @@ pipeline {
             when {
                 branch 'main'
             }
+
             steps {
                 script {
                     if (isUnix()) {
+
                         sh '''
                             docker compose down
                             docker compose up -d --build
                             sleep 15
                             curl -f http://localhost:5000/api/health
                         '''
+
                     } else {
+
                         bat '''
                             docker compose down
                             docker compose up -d --build
-                            timeout /t 15
+                            timeout /t 15 /nobreak
                             curl -f http://localhost:5000/api/health
+
+                            if errorlevel 1 (
+                                docker compose logs
+                                exit /b 1
+                            )
                         '''
                     }
                 }
@@ -192,17 +214,14 @@ pipeline {
         success {
             echo 'Pipeline completed successfully.'
         }
+
         failure {
             echo 'Pipeline failed - see stage logs above for the cause.'
         }
+
         always {
-            script {
-                if (isUnix()) {
-                    sh 'docker compose down || true'
-                } else {
-                    bat 'docker compose down || exit 0'
-                }
-            }
+            // Windows Jenkins agent cleanup
+            bat 'docker compose down || exit 0'
         }
     }
 }
